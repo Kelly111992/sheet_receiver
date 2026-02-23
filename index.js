@@ -33,18 +33,23 @@ async function sendWhatsApp(number, text) {
 }
 
 app.post('/webhook', async (req, res) => {
-    try {
-        const data = req.body;
-        console.log(`🚀 LEAD RECIBIDO: ${data.Nombre}`);
+    // Si los datos vienen dentro de .body (clásico de n8n) o directos
+    const data = req.body.body || req.body;
 
+    console.log(`🚀 PROCESANDO LEAD: ${data.Nombre || 'Sin nombre'}`);
+
+    // RESPUESTA RÁPIDA PARA EVITAR TIMEOUT EN N8N
+    res.status(200).json({ success: true, status: 'Processing' });
+
+    // PROCESAMIENTO EN BACKGROUND
+    if (data.Numero) {
         const message = `🏠 *NUEVO LEAD DE EXCEL* 🏠\n━━━━━━━━━━━━━━━\n👤 *Nombre:* ${data.Nombre || 'No disponible'}\n📱 *Teléfono:* ${data.Numero}\n🏠 *Propiedad:* ${data.Propiedad || 'No especificada'}\n🏗️ *Plataforma:* ${data.Plataforma || 'N/A'}\n━━━━━━━━━━━━━━━`;
 
-        await Promise.all(GESTORES.map(num => sendWhatsApp(num, message)));
-        res.status(200).json({ success: true });
-    } catch (e) {
-        console.error(e);
-        res.status(500).json({ error: e.message });
+        // No usamos await aquí para que no bloquee, lanzamos las promesas
+        GESTORES.forEach(num => sendWhatsApp(num, message).catch(e => console.error(e)));
+    } else {
+        console.log('⚠️ Lead recibido sin número de teléfono');
     }
 });
 
-app.listen(3000, '0.0.0.0', () => console.log('✅ Receptor Excel listo en puerto 3000'));
+app.listen(3000, '0.0.0.0', () => console.log('✅ LUX LUX Excel encendido en puerto 3000'));
