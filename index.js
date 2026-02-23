@@ -13,43 +13,73 @@ const GESTORES = ['523318043673', '523312505239', '523318213624'];
 async function sendWhatsApp(number, text) {
     if (!number) return;
     const cleanNumber = number.toString().replace(/[^\d+]/g, '');
+
     return new Promise((resolve) => {
         const urlObj = new URL(EVOLUTION_API_URL);
         const body = JSON.stringify({ number: cleanNumber, text });
+
         const options = {
             hostname: urlObj.hostname,
             path: `/message/sendText/${EVOLUTION_INSTANCE}`,
             method: 'POST',
             port: urlObj.port || 443,
-            headers: { 'Content-Type': 'application/json', 'apikey': EVOLUTION_API_KEY, 'Content-Length': Buffer.byteLength(body) }
+            headers: {
+                'Content-Type': 'application/json',
+                'apikey': EVOLUTION_API_KEY,
+                'Content-Length': Buffer.byteLength(body)
+            },
+            timeout: 7000 // 7 segundos máximo para no colgar el servidor
         };
+
         const req = https.request(options, res => {
-            res.on('data', () => { });
-            res.on('end', () => resolve(res.statusCode));
+            let resData = '';
+            res.on('data', chunk => resData += chunk);
+            res.on('end', () => {
+                console.log(`   📱 Resultado WA (${cleanNumber}): ${res.statusCode}`);
+                resolve(res.statusCode);
+            });
         });
-        req.on('error', () => resolve(500));
-        req.write(body); req.end();
+
+        req.on('error', (e) => {
+            console.error(`   ❌ Error WA (${cleanNumber}): ${e.message}`);
+            resolve(500);
+        });
+
+        req.on('timeout', () => {
+            req.destroy();
+            console.error(`   ⏰ Timeout WA (${cleanNumber})`);
+            resolve(408);
+        });
+
+        req.write(body);
+        req.end();
     });
 }
 
 app.post('/webhook', async (req, res) => {
-    // Si los datos vienen dentro de .body (clásico de n8n) o directos
-    const data = req.body.body || req.body;
+    try {
+        const data = req.body;
+        console.log(`🚀 LEAD RECIBIDO: ${data.Nombre || 'Sin nombre'}`);
 
-    console.log(`🚀 PROCESANDO LEAD: ${data.Nombre || 'Sin nombre'}`);
+        // RESPUESTA INMEDIATA A N8N
+        res.status(200).json({ success: true });
 
-    // RESPUESTA RÁPIDA PARA EVITAR TIMEOUT EN N8N
-    res.status(200).json({ success: true, status: 'Processing' });
+        // PROCESAMIENTO BACKGROUND
+        const numero = data.Numero || data.numero;
+        if (numero) {
+            const message = `🏠 *NUEVO LEAD DE EXCEL* 🏠\n━━━━━━━━━━━━━━━\n👤 *Nombre:* ${data.Nombre || 'No disponible'}\n📱 *Teléfono:* ${numero}\n🏠 *Propiedad:* ${data.Propiedad || 'No especificada'}\n🏗️ *Plataforma:* ${data.Plataforma || 'N/A'}\n━━━━━━━━━━━━━━━`;
 
-    // PROCESAMIENTO EN BACKGROUND
-    if (data.Numero) {
-        const message = `🏠 *NUEVO LEAD DE EXCEL* 🏠\n━━━━━━━━━━━━━━━\n👤 *Nombre:* ${data.Nombre || 'No disponible'}\n📱 *Teléfono:* ${data.Numero}\n🏠 *Propiedad:* ${data.Propiedad || 'No especificada'}\n🏗️ *Plataforma:* ${data.Plataforma || 'N/A'}\n━━━━━━━━━━━━━━━`;
-
-        // No usamos await aquí para que no bloquee, lanzamos las promesas
-        GESTORES.forEach(num => sendWhatsApp(num, message).catch(e => console.error(e)));
-    } else {
-        console.log('⚠️ Lead recibido sin número de teléfono');
+            console.log(`   📱 Notificando a ${GESTORES.length} gestores...`);
+            // Ejecutar envíos
+            for (const num of GESTORES) {
+                sendWhatsApp(num, message).catch(e => console.error(`Error enviando a ${num}:`, e.message));
+            }
+        } else {
+            console.log('⚠️ Lead sin número, no se puede enviar WhatsApp');
+        }
+    } catch (err) {
+        console.error('💥 Error crítico:', err.message);
     }
 });
 
-app.listen(3000, '0.0.0.0', () => console.log('✅ LUX LUX Excel encendido en puerto 3000'));
+app.listen(3000, '0.0.0.0', () => console.log('✅ Receptor Excel LUX activo en puerto 3000'));
