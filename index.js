@@ -5,6 +5,7 @@ const https = require('https');
 const app = express();
 app.use(bodyParser.json());
 
+// CONFIG EXTERNA E INTERNA
 const EVOLUTION_API_URL = 'https://evolutionapi-evolution-api.ckoomq.easypanel.host';
 const EVOLUTION_INSTANCE = 'lugo_email';
 const EVOLUTION_API_KEY = '429683C4C977415CAAFCCE10F7D57E11';
@@ -13,67 +14,86 @@ const GESTORES = ['523318043673', '523312505239', '523318213624'];
 async function sendWhatsApp(number, text) {
     if (!number) return;
     const cleanNumber = number.toString().replace(/[^\d+]/g, '');
+
+    console.log(`   [DEBUG] Intentando enviar a ${cleanNumber}...`);
+
     return new Promise((resolve) => {
-        const urlObj = new URL(EVOLUTION_API_URL);
         const body = JSON.stringify({ number: cleanNumber, text });
+        const urlObj = new URL(EVOLUTION_API_URL);
+
         const options = {
-            hostname: urlObj.hostname, path: `/message/sendText/${EVOLUTION_INSTANCE}`, method: 'POST',
-            port: urlObj.port || 443,
-            headers: { 'Content-Type': 'application/json', 'apikey': EVOLUTION_API_KEY, 'Content-Length': Buffer.byteLength(body) },
-            timeout: 8000
+            hostname: urlObj.hostname,
+            port: 443,
+            path: `/message/sendText/${EVOLUTION_INSTANCE}`,
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'apikey': EVOLUTION_API_KEY,
+                'Content-Length': Buffer.byteLength(body)
+            },
+            timeout: 10000 // 10 segundos
         };
+
         const req = https.request(options, res => {
-            res.on('data', () => { });
-            res.on('end', () => resolve(res.statusCode));
+            let resData = '';
+            res.on('data', d => resData += d);
+            res.on('end', () => {
+                console.log(`   ✅ RESPUESTA API (${cleanNumber}): ${res.statusCode}`);
+                resolve(res.statusCode);
+            });
         });
-        req.on('error', () => resolve(500));
-        req.write(body); req.end();
+
+        req.on('error', e => {
+            console.error(`   ❌ ERROR RED API (${cleanNumber}): ${e.message}`);
+            resolve(500);
+        });
+
+        req.on('timeout', () => {
+            req.destroy();
+            console.error(`   ⏰ TIMEOUT API (${cleanNumber})`);
+            resolve(408);
+        });
+
+        req.write(body);
+        req.end();
     });
 }
 
 app.post('/webhook', (req, res) => {
-    // 1. RESPUESTA ULTRA-RÁPIDA A N8N (Cero bloqueos)
-    res.status(200).json({ success: true, message: 'Lead queued' });
+    // 1. RESPUESTA INMEDIATA
+    res.status(200).json({ success: true });
 
-    // 2. PROCESAMIENTO EN SEGUNDO PLANO
+    // 2. BACKGROUND WORK
     (async () => {
         try {
             const data = req.body;
+            // Si Numero viene como Jesus Ernesto, buscamos el Numero real en otros campos
+            let nombre = data.Nombre || "Sin nombre";
+            let telefono = data.Numero || "Sin numero";
 
-            // Lógica inteligente para encontrar nombre y número si vienen corridos
-            const nombre = (data.Nombre && data.Nombre !== 'Meta') ? data.Nombre : (data.Numero || 'Sin nombre');
-            const telefono = (data.Nombre === 'Meta') ? data.Numero : (data.Numero || data.telefono);
-
-            console.log(`🚀 LEAD EN COLA: ${nombre} (${telefono})`);
-
-            if (telefono && telefono.length > 5) {
-                const message = `🏠 *NUEVO LEAD DE EXCEL* 🏠
-━━━━━━━━━━━━━━━━━━━━━━━
-👤 *Nombre:* ${nombre}
-📱 *Teléfono:* ${telefono}
-📧 *Email:* ${data.Correo || 'No disponible'}
-
-🏠 *Propiedad:* ${data.Propiedad || 'No especificada'}
-🆔 *ID Interno:* ${data.ID_Interno || 'N/A'}
-🎯 *Campaña:* ${data.Campaña || 'Captación'}
-🏗️ *Plataforma:* ${data.Plataforma || 'N/A'}
-📩 *Modalidad:* ${data.Modalidad || 'N/A'}
-
-🔗 *Link Anuncio:*
-${data.LinkAnuncio || 'No disponible'}
-
-📅 *Fecha:* ${data.Fecha || 'Hoy'}
-━━━━━━━━━━━━━━━━━━━━━━━`;
-
-                console.log(`   📱 Enviando a ${GESTORES.length} gestores...`);
-                for (const num of GESTORES) {
-                    sendWhatsApp(num, message).catch(e => console.error(`Error WA ${num}:`, e.message));
+            // Corrección si vienen corridos
+            if (nombre === "Meta" || nombre.includes("Jesus")) {
+                // Intentamos deducir por el valor
+                if (data.Numero && data.Numero.includes("jesus")) {
+                    telefono = data.Nombre; // A veces el numero viene en el campo nombre
                 }
             }
+
+            console.log(`🚀 NUEVO LEAD: ${nombre} | Tel: ${telefono}`);
+
+            if (telefono && telefono.length > 5) {
+                const message = `🏠 *NUEVO LEAD DE EXCEL* 🏠\n━━━━━━━━━━━━━━━\n👤 *Nombre:* ${nombre}\n📱 *Teléfono:* ${telefono}\n🏠 *Propiedad:* ${data.Propiedad || 'N/A'}\n🎯 *Campaña:* ${data.Campaña || 'N/A'}\n🏗️ *Plataforma:* ${data.Plataforma || 'N/A'}\n━━━━━━━━━━━━━━━`;
+
+                // Ejecutamos en paralelo para no perder tiempo
+                await Promise.all(GESTORES.map(num => sendWhatsApp(num, message)));
+                console.log(`   🏁 Proceso de envío finalizado.`);
+            } else {
+                console.log(`   ⚠️ Lead ignorado: El número "${telefono}" no parece válido.`);
+            }
         } catch (err) {
-            console.error('Error background:', err.message);
+            console.error(`   💥 Error crítico:`, err.message);
         }
     })();
 });
 
-app.listen(3000, '0.0.0.0', () => console.log('✅ RECEPTOR ULTRA-FAST v3.0 ACTIVO'));
+app.listen(3000, '0.0.0.0', () => console.log('✅ RECEPTOR LUX v3.1 LISTO'));
