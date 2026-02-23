@@ -18,8 +18,9 @@ async function sendWhatsApp(number, text) {
         const body = JSON.stringify({ number: cleanNumber, text });
         const options = {
             hostname: urlObj.hostname, path: `/message/sendText/${EVOLUTION_INSTANCE}`, method: 'POST',
+            port: urlObj.port || 443,
             headers: { 'Content-Type': 'application/json', 'apikey': EVOLUTION_API_KEY, 'Content-Length': Buffer.byteLength(body) },
-            timeout: 7000
+            timeout: 8000
         };
         const req = https.request(options, res => {
             res.on('data', () => { });
@@ -30,24 +31,31 @@ async function sendWhatsApp(number, text) {
     });
 }
 
-app.post('/webhook', async (req, res) => {
-    try {
-        const data = req.body;
-        console.log(`🚀 PROCESANDO LEAD COMPLETO: ${data.Nombre}`);
+app.post('/webhook', (req, res) => {
+    // 1. RESPUESTA ULTRA-RÁPIDA A N8N (Cero bloqueos)
+    res.status(200).json({ success: true, message: 'Lead queued' });
 
-        res.status(200).json({ success: true });
+    // 2. PROCESAMIENTO EN SEGUNDO PLANO
+    (async () => {
+        try {
+            const data = req.body;
 
-        const numero = data.Numero || data.numero;
-        if (numero) {
-            const message = `🏠 *NUEVO LEAD DE EXCEL* 🏠
+            // Lógica inteligente para encontrar nombre y número si vienen corridos
+            const nombre = (data.Nombre && data.Nombre !== 'Meta') ? data.Nombre : (data.Numero || 'Sin nombre');
+            const telefono = (data.Nombre === 'Meta') ? data.Numero : (data.Numero || data.telefono);
+
+            console.log(`🚀 LEAD EN COLA: ${nombre} (${telefono})`);
+
+            if (telefono && telefono.length > 5) {
+                const message = `🏠 *NUEVO LEAD DE EXCEL* 🏠
 ━━━━━━━━━━━━━━━━━━━━━━━
-👤 *Nombre:* ${data.Nombre || 'No disponible'}
-📱 *Teléfono:* ${numero}
+👤 *Nombre:* ${nombre}
+📱 *Teléfono:* ${telefono}
 📧 *Email:* ${data.Correo || 'No disponible'}
 
 🏠 *Propiedad:* ${data.Propiedad || 'No especificada'}
 🆔 *ID Interno:* ${data.ID_Interno || 'N/A'}
-🎯 *Campaña:* ${data.Campaña || 'N/A'}
+🎯 *Campaña:* ${data.Campaña || 'Captación'}
 🏗️ *Plataforma:* ${data.Plataforma || 'N/A'}
 📩 *Modalidad:* ${data.Modalidad || 'N/A'}
 
@@ -55,12 +63,17 @@ app.post('/webhook', async (req, res) => {
 ${data.LinkAnuncio || 'No disponible'}
 
 📅 *Fecha:* ${data.Fecha || 'Hoy'}
-🌐 *Fuente:* ${data.Fuente || 'Google Sheets'}
 ━━━━━━━━━━━━━━━━━━━━━━━`;
 
-            GESTORES.forEach(num => sendWhatsApp(num, message).catch(e => console.error(e)));
+                console.log(`   📱 Enviando a ${GESTORES.length} gestores...`);
+                for (const num of GESTORES) {
+                    sendWhatsApp(num, message).catch(e => console.error(`Error WA ${num}:`, e.message));
+                }
+            }
+        } catch (err) {
+            console.error('Error background:', err.message);
         }
-    } catch (err) { console.error(err); }
+    })();
 });
 
-app.listen(3000, '0.0.0.0', () => console.log('✅ Receptor Excel LUX activo v2.0'));
+app.listen(3000, '0.0.0.0', () => console.log('✅ RECEPTOR ULTRA-FAST v3.0 ACTIVO'));
