@@ -13,73 +13,54 @@ const GESTORES = ['523318043673', '523312505239', '523318213624'];
 async function sendWhatsApp(number, text) {
     if (!number) return;
     const cleanNumber = number.toString().replace(/[^\d+]/g, '');
-
     return new Promise((resolve) => {
         const urlObj = new URL(EVOLUTION_API_URL);
         const body = JSON.stringify({ number: cleanNumber, text });
-
         const options = {
-            hostname: urlObj.hostname,
-            path: `/message/sendText/${EVOLUTION_INSTANCE}`,
-            method: 'POST',
-            port: urlObj.port || 443,
-            headers: {
-                'Content-Type': 'application/json',
-                'apikey': EVOLUTION_API_KEY,
-                'Content-Length': Buffer.byteLength(body)
-            },
-            timeout: 7000 // 7 segundos máximo para no colgar el servidor
+            hostname: urlObj.hostname, path: `/message/sendText/${EVOLUTION_INSTANCE}`, method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'apikey': EVOLUTION_API_KEY, 'Content-Length': Buffer.byteLength(body) },
+            timeout: 7000
         };
-
         const req = https.request(options, res => {
-            let resData = '';
-            res.on('data', chunk => resData += chunk);
-            res.on('end', () => {
-                console.log(`   📱 Resultado WA (${cleanNumber}): ${res.statusCode}`);
-                resolve(res.statusCode);
-            });
+            res.on('data', () => { });
+            res.on('end', () => resolve(res.statusCode));
         });
-
-        req.on('error', (e) => {
-            console.error(`   ❌ Error WA (${cleanNumber}): ${e.message}`);
-            resolve(500);
-        });
-
-        req.on('timeout', () => {
-            req.destroy();
-            console.error(`   ⏰ Timeout WA (${cleanNumber})`);
-            resolve(408);
-        });
-
-        req.write(body);
-        req.end();
+        req.on('error', () => resolve(500));
+        req.write(body); req.end();
     });
 }
 
 app.post('/webhook', async (req, res) => {
     try {
         const data = req.body;
-        console.log(`🚀 LEAD RECIBIDO: ${data.Nombre || 'Sin nombre'}`);
+        console.log(`🚀 PROCESANDO LEAD COMPLETO: ${data.Nombre}`);
 
-        // RESPUESTA INMEDIATA A N8N
         res.status(200).json({ success: true });
 
-        // PROCESAMIENTO BACKGROUND
         const numero = data.Numero || data.numero;
         if (numero) {
-            const message = `🏠 *NUEVO LEAD DE EXCEL* 🏠\n━━━━━━━━━━━━━━━\n👤 *Nombre:* ${data.Nombre || 'No disponible'}\n📱 *Teléfono:* ${numero}\n🏠 *Propiedad:* ${data.Propiedad || 'No especificada'}\n🏗️ *Plataforma:* ${data.Plataforma || 'N/A'}\n━━━━━━━━━━━━━━━`;
+            const message = `🏠 *NUEVO LEAD DE EXCEL* 🏠
+━━━━━━━━━━━━━━━━━━━━━━━
+👤 *Nombre:* ${data.Nombre || 'No disponible'}
+📱 *Teléfono:* ${numero}
+📧 *Email:* ${data.Correo || 'No disponible'}
 
-            console.log(`   📱 Notificando a ${GESTORES.length} gestores...`);
-            // Ejecutar envíos
-            for (const num of GESTORES) {
-                sendWhatsApp(num, message).catch(e => console.error(`Error enviando a ${num}:`, e.message));
-            }
-        } else {
-            console.log('⚠️ Lead sin número, no se puede enviar WhatsApp');
+🏠 *Propiedad:* ${data.Propiedad || 'No especificada'}
+🆔 *ID Interno:* ${data.ID_Interno || 'N/A'}
+🎯 *Campaña:* ${data.Campaña || 'N/A'}
+🏗️ *Plataforma:* ${data.Plataforma || 'N/A'}
+📩 *Modalidad:* ${data.Modalidad || 'N/A'}
+
+🔗 *Link Anuncio:*
+${data.LinkAnuncio || 'No disponible'}
+
+📅 *Fecha:* ${data.Fecha || 'Hoy'}
+🌐 *Fuente:* ${data.Fuente || 'Google Sheets'}
+━━━━━━━━━━━━━━━━━━━━━━━`;
+
+            GESTORES.forEach(num => sendWhatsApp(num, message).catch(e => console.error(e)));
         }
-    } catch (err) {
-        console.error('💥 Error crítico:', err.message);
-    }
+    } catch (err) { console.error(err); }
 });
 
-app.listen(3000, '0.0.0.0', () => console.log('✅ Receptor Excel LUX activo en puerto 3000'));
+app.listen(3000, '0.0.0.0', () => console.log('✅ Receptor Excel LUX activo v2.0'));
