@@ -83,22 +83,17 @@ app.post('/webhook', (req, res) => {
 
             if (telefono && telefono.length > 5) {
 
-                // Formatear Fecha de México
+                // Formatear Fecha de forma manual (A prueba de fallos)
                 let fechaFormateada = data.Fecha || 'Hoy';
                 if (data.Fecha) {
                     try {
                         const dateObj = new Date(data.Fecha);
                         if (!isNaN(dateObj.getTime())) {
-                            // Si la hora es exactamente las 00:00:00, G Sheets no mandó hora, solo mandó fecha
-                            if (dateObj.getUTCHours() === 0 && dateObj.getUTCMinutes() === 0) {
-                                // Formato solo fecha (día/mes/año)
-                                fechaFormateada = dateObj.toLocaleDateString('es-MX', { timeZone: 'America/Mexico_City' });
-                            } else {
-                                // Formato completo (día/mes/año, hh:mm a.m.) si sí tiene hora
-                                fechaFormateada = dateObj.toLocaleString('es-MX', { timeZone: 'America/Mexico_City', hour12: true });
-                            }
+                            fechaFormateada = `${dateObj.getDate()}/${dateObj.getMonth() + 1}/${dateObj.getFullYear()}`;
                         }
-                    } catch (e) { }
+                    } catch (e) {
+                        console.error("Error formateando fecha:", e);
+                    }
                 }
 
                 // Asegurar las Keys de tu Sheet exactas
