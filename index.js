@@ -89,7 +89,14 @@ app.post('/webhook', (req, res) => {
                     try {
                         const dateObj = new Date(data.Fecha);
                         if (!isNaN(dateObj.getTime())) {
-                            fechaFormateada = dateObj.toLocaleString('es-MX', { timeZone: 'America/Mexico_City', hour12: true });
+                            // Si la hora es exactamente las 00:00:00, G Sheets no mandó hora, solo mandó fecha
+                            if (dateObj.getUTCHours() === 0 && dateObj.getUTCMinutes() === 0) {
+                                // Formato solo fecha (día/mes/año)
+                                fechaFormateada = dateObj.toLocaleDateString('es-MX', { timeZone: 'America/Mexico_City' });
+                            } else {
+                                // Formato completo (día/mes/año, hh:mm a.m.) si sí tiene hora
+                                fechaFormateada = dateObj.toLocaleString('es-MX', { timeZone: 'America/Mexico_City', hour12: true });
+                            }
                         }
                     } catch (e) { }
                 }
