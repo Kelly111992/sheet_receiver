@@ -82,7 +82,40 @@ app.post('/webhook', (req, res) => {
             console.log(`🚀 NUEVO LEAD: ${nombre} | Tel: ${telefono}`);
 
             if (telefono && telefono.length > 5) {
-                const message = `🏠 *NUEVO LEAD DE EXCEL* 🏠\n━━━━━━━━━━━━━━━\n👤 *Nombre:* ${nombre}\n📱 *Teléfono:* ${telefono}\n🏠 *Propiedad:* ${data.Propiedad || 'N/A'}\n🎯 *Campaña:* ${data.Campaña || 'N/A'}\n🏗️ *Plataforma:* ${data.Plataforma || 'N/A'}\n━━━━━━━━━━━━━━━`;
+
+                // Formatear Fecha de México
+                let fechaFormateada = data.Fecha || 'Hoy';
+                if (data.Fecha) {
+                    try {
+                        const dateObj = new Date(data.Fecha);
+                        if (!isNaN(dateObj.getTime())) {
+                            fechaFormateada = dateObj.toLocaleString('es-MX', { timeZone: 'America/Mexico_City', hour12: true });
+                        }
+                    } catch (e) { }
+                }
+
+                // Asegurar las Keys de tu Sheet exactas
+                const correo = data.Correo || data['Correo si aplica'] || 'No disponible';
+                const idInterno = data.ID_Interno || data['ID Interno'] || 'N/A';
+                const linkAnuncio = data.LinkAnuncio || data['Link al anuncio'] || 'No disponible';
+
+                const message = `🏠 *NUEVO LEAD DE EXCEL* 🏠
+━━━━━━━━━━━━━━━━━━━━━━━
+👤 *Nombre:* ${nombre}
+📱 *Teléfono:* ${telefono}
+📧 *Email:* ${correo}
+
+🏠 *Propiedad:* ${data.Propiedad || 'No especificada'}
+🆔 *ID Interno:* ${idInterno}
+🎯 *Campaña:* ${data.Campaña || 'N/A'}
+🏗️ *Plataforma:* ${data.Plataforma || 'N/A'}
+📩 *Modalidad:* ${data.Modalidad || 'whatsapp'}
+
+🔗 *Link Anuncio:*
+${linkAnuncio}
+
+📅 *Fecha:* ${fechaFormateada}
+━━━━━━━━━━━━━━━━━━━━━━━`;
 
                 // Ejecutamos en paralelo para no perder tiempo
                 await Promise.all(GESTORES.map(num => sendWhatsApp(num, message)));
