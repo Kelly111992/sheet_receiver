@@ -67,21 +67,22 @@ app.post('/webhook', (req, res) => {
     (async () => {
         try {
             const data = req.body;
-            // Si Numero viene como Jesus Ernesto, buscamos el Numero real en otros campos
+            // Limpieza y detección de teléfono mejorada
             let nombre = data.Nombre || "Sin nombre";
-            let telefono = data.Numero || "Sin numero";
+            let telefonoRaw = String(data.Numero || data.numero || "").trim();
 
-            // Corrección si vienen corridos
-            if (nombre === "Meta" || nombre.includes("Jesus")) {
-                // Intentamos deducir por el valor
-                if (data.Numero && data.Numero.includes("jesus")) {
-                    telefono = data.Nombre; // A veces el numero viene en el campo nombre
-                }
+            // Si el nombre parece un número y el número parece un nombre (sucede cuando n8n los manda corridos)
+            if (nombre.replace(/[^\d]/g, "").length > 8 && telefonoRaw.replace(/[^\d]/g, "").length < 3) {
+                let temp = nombre;
+                nombre = telefonoRaw || "Sin nombre";
+                telefonoRaw = temp;
             }
 
-            console.log(`🚀 NUEVO LEAD: ${nombre} | Tel: ${telefono}`);
+            const telefono = telefonoRaw.replace(/[^\d]/g, ""); // Solo números
 
-            if (telefono && telefono.length > 5) {
+            console.log(`🚀 NUEVO LEAD: ${nombre} | Tel Original: ${telefonoRaw} | Tel Limpio: ${telefono}`);
+
+            if (telefono.length >= 8) {
 
                 // Formatear Fecha de forma manual (A prueba de fallos)
                 let fechaFormateada = data.Fecha || 'Hoy';
